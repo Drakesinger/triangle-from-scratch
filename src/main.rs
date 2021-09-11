@@ -6,7 +6,6 @@
 
 /// Following the tutorial :
 /// https://rust-tutorials.github.io/triangle-from-scratch/opening_a_window/win32.html
-
 use core::ffi::c_void;
 use core::ptr::{null, null_mut};
 use std::os::raw::{c_int, c_uint};
@@ -82,6 +81,28 @@ macro_rules! unsafe_impl_default_zeroed {
     };
 }
 
+type LONG = c_long;
+type c_long = i32;
+
+#[repr(C)]
+pub struct POINT {
+    x: LONG,
+    y: LONG,
+}
+unsafe_impl_default_zeroed!(POINT);
+
+#[repr(C)]
+pub struct MSG {
+    hwnd: HWND,
+    message: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+    time: DWORD,
+    pt: POINT,
+    lPrivate: DWORD,
+}
+unsafe_impl_default_zeroed!(MSG);
+
 type HMODULE = HINSTANCE;
 type DWORD = c_ulong;
 type c_ulong = u32;
@@ -103,6 +124,7 @@ type HMENU = HANDLE;
 type LPVOID = *mut c_void;
 
 type BOOL = c_int;
+type LPMSG = *const MSG;
 
 #[link(name = "User32")]
 extern "system" {
@@ -130,6 +152,16 @@ extern "system" {
 
     /// [`DefWindowProcW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-defwindowprocw)
     pub fn DefWindowProcW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
+
+    ///[`GetMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagew)
+    pub fn GetMessageW(lpMsg: LPMSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) -> BOOL;
+
+    /// [`TranslateMessage`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-translatemessage)
+    pub fn TranslateMessage(lpMsg: *const MSG) -> BOOL;
+
+    /// [`DispatchMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-dispatchmessagew)
+    pub fn DispatchMessageW(lpMsg: *const MSG) -> LRESULT;
+
 }
 
 /// Turns a Rust string slice into a null-terminated utf-16 vector.
@@ -221,4 +253,26 @@ fn main() {
     }
 
     let _previously_visible = unsafe { ShowWindow(window_handle, SW_SHOW) };
+
+    let mut msg = MSG::default();
+    loop {
+        let message_return = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
+        // If we receive the WM_QUIT message, the return value is 0.
+        if message_return == 0 {
+            break;
+        }
+        // If we receive a -1, then there was an error.
+        else if message_return == -1 {
+            let last_error = unsafe { GetLastError() };
+            panic!(
+                "Error when trying to get a message. Error code: {}",
+                last_error
+            );
+        } else {
+            unsafe {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+    }
 }
