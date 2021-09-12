@@ -47,6 +47,82 @@ type WNDPROC = Option<
     unsafe extern "system" fn(hwnd: HWND, uMsg: UINT, wParam: WPARAM, lParam: LPARAM) -> LRESULT,
 >;
 
+/// Window Messages
+const WM_NULL: u32 = 0x0000;
+const WM_CREATE: u32 = 0x0001;
+const WM_DESTROY: u32 = 0x0002;
+const WM_MOVE: u32 = 0x0003;
+const WM_SIZE: u32 = 0x0005;
+
+const WM_ACTIVATE: u32 = 0x0006;
+
+const WM_SETFOCUS: u32 = 0x0007;
+const WM_KILLFOCUS: u32 = 0x0008;
+const WM_ENABLE: u32 = 0x000A;
+const WM_SETREDRAW: u32 = 0x000B;
+const WM_SETTEXT: u32 = 0x000C;
+const WM_GETTEXT: u32 = 0x000D;
+const WM_GETTEXTLENGTH: u32 = 0x000E;
+const WM_PAINT: u32 = 0x000F;
+const WM_CLOSE: u32 = 0x0010;
+const WM_QUIT: u32 = 0x0012;
+const WM_ERASEBKGND: u32 = 0x0014;
+const WM_SYSCOLORCHANGE: u32 = 0x0015;
+const WM_SHOWWINDOW: u32 = 0x0018;
+const WM_WININICHANGE: u32 = 0x001A;
+const WM_DEVMODECHANGE: u32 = 0x001B;
+const WM_ACTIVATEAPP: u32 = 0x001C;
+const WM_FONTCHANGE: u32 = 0x001D;
+const WM_TIMECHANGE: u32 = 0x001E;
+const WM_CANCELMODE: u32 = 0x001F;
+const WM_SETCURSOR: u32 = 0x0020;
+const WM_MOUSEACTIVATE: u32 = 0x0021;
+const WM_CHILDACTIVATE: u32 = 0x0022;
+const WM_QUEUESYNC: u32 = 0x0023;
+const WM_GETMINMAXINFO: u32 = 0x0024;
+
+/// Window Styles
+const WS_OVERLAPPED: u32 = 0x00000000;
+const WS_POPUP: u32 = 0x80000000;
+const WS_CHILD: u32 = 0x40000000;
+const WS_MINIMIZE: u32 = 0x20000000;
+const WS_VISIBLE: u32 = 0x10000000;
+const WS_DISABLED: u32 = 0x08000000;
+const WS_CLIPSIBLINGS: u32 = 0x04000000;
+const WS_CLIPCHILDREN: u32 = 0x02000000;
+const WS_MAXIMIZE: u32 = 0x01000000;
+const WS_CAPTION: u32 = 0x00C00000; /* WS_BORDER | WS_DLGFRAME  */
+const WS_BORDER: u32 = 0x00800000;
+const WS_DLGFRAME: u32 = 0x00400000;
+const WS_VSCROLL: u32 = 0x00200000;
+const WS_HSCROLL: u32 = 0x00100000;
+const WS_SYSMENU: u32 = 0x00080000;
+const WS_THICKFRAME: u32 = 0x00040000;
+const WS_GROUP: u32 = 0x00020000;
+const WS_TABSTOP: u32 = 0x00010000;
+
+const WS_MINIMIZEBOX: u32 = 0x00020000;
+const WS_MAXIMIZEBOX: u32 = 0x00010000;
+
+const WS_TILED: u32 = WS_OVERLAPPED;
+const WS_ICONIC: u32 = WS_MINIMIZE;
+const WS_SIZEBOX: u32 = WS_THICKFRAME;
+const WS_TILEDWINDOW: u32 = WS_OVERLAPPEDWINDOW;
+
+/// Common Window Styles
+const WS_OVERLAPPEDWINDOW: u32 =
+    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
+const WS_POPUPWINDOW: u32 = WS_POPUP | WS_BORDER | WS_SYSMENU;
+
+const WS_CHILDWINDOW: u32 = WS_CHILD;
+
+const CW_USEDEFAULT: c_int = 0x80000000_u32 as c_int;
+
+const SW_SHOW: c_int = 5;
+
+const IDC_ARROW: LPCWSTR = MAKEINTRESOURCE(32512);
+
 #[repr(C)] // Memory Layout : https://doc.rust-lang.org/reference/type-layout.html
 ///[`WNDCLASSW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
 pub struct WNDCLASSW {
@@ -107,6 +183,21 @@ type HMODULE = HINSTANCE;
 type DWORD = c_ulong;
 type c_ulong = u32;
 
+unsafe extern "system" fn window_procedure(
+    hWnd: HWND,
+    uMsg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+) -> LRESULT {
+    match uMsg {
+        WM_CLOSE => drop(DestroyWindow(hWnd)),
+        WM_DESTROY => PostQuitMessage(0),
+        _ => return DefWindowProcW(hWnd, uMsg, wParam, lParam),
+    }
+
+    0
+}
+
 #[link(name = "Kernel32")]
 extern "system" {
     /// [`GetModuleHandleW`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew)
@@ -125,6 +216,13 @@ type LPVOID = *mut c_void;
 
 type BOOL = c_int;
 type LPMSG = *const MSG;
+
+type LPWSTR = *mut WCHAR;
+type ULONG_PTR = usize;
+
+pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
+    i as ULONG_PTR as LPWSTR
+}
 
 #[link(name = "User32")]
 extern "system" {
@@ -162,52 +260,21 @@ extern "system" {
     /// [`DispatchMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-dispatchmessagew)
     pub fn DispatchMessageW(lpMsg: *const MSG) -> LRESULT;
 
+    /// [`PostQuitMessage`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-postquitmessage)
+    pub fn PostQuitMessage(nExitCode: c_int);
+
+    /// [`DestroyWindow`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-destroywindow)
+    pub fn DestroyWindow(hWnd: HWND) -> BOOL;
+
+    /// [`LoadCursorW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadcursorw)
+    pub fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) -> HCURSOR;
+
 }
 
 /// Turns a Rust string slice into a null-terminated utf-16 vector.
 pub fn wide_null(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
-
-/// Window Styles
-const WS_OVERLAPPED: u32 = 0x00000000;
-const WS_POPUP: u32 = 0x80000000;
-const WS_CHILD: u32 = 0x40000000;
-const WS_MINIMIZE: u32 = 0x20000000;
-const WS_VISIBLE: u32 = 0x10000000;
-const WS_DISABLED: u32 = 0x08000000;
-const WS_CLIPSIBLINGS: u32 = 0x04000000;
-const WS_CLIPCHILDREN: u32 = 0x02000000;
-const WS_MAXIMIZE: u32 = 0x01000000;
-const WS_CAPTION: u32 = 0x00C00000; /* WS_BORDER | WS_DLGFRAME  */
-const WS_BORDER: u32 = 0x00800000;
-const WS_DLGFRAME: u32 = 0x00400000;
-const WS_VSCROLL: u32 = 0x00200000;
-const WS_HSCROLL: u32 = 0x00100000;
-const WS_SYSMENU: u32 = 0x00080000;
-const WS_THICKFRAME: u32 = 0x00040000;
-const WS_GROUP: u32 = 0x00020000;
-const WS_TABSTOP: u32 = 0x00010000;
-
-const WS_MINIMIZEBOX: u32 = 0x00020000;
-const WS_MAXIMIZEBOX: u32 = 0x00010000;
-
-const WS_TILED: u32 = WS_OVERLAPPED;
-const WS_ICONIC: u32 = WS_MINIMIZE;
-const WS_SIZEBOX: u32 = WS_THICKFRAME;
-const WS_TILEDWINDOW: u32 = WS_OVERLAPPEDWINDOW;
-
-/// Common Window Styles
-const WS_OVERLAPPEDWINDOW: u32 =
-    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
-
-const WS_POPUPWINDOW: u32 = WS_POPUP | WS_BORDER | WS_SYSMENU;
-
-const WS_CHILDWINDOW: u32 = WS_CHILD;
-
-const CW_USEDEFAULT: c_int = 0x80000000_u32 as c_int;
-
-const SW_SHOW: c_int = 5;
 
 fn main() {
     println!("Hello, world!");
@@ -217,8 +284,9 @@ fn main() {
     let sample_window_name_wn = wide_null("Sample Window Name");
 
     let mut window_class: WNDCLASSW = WNDCLASSW::default();
-    window_class.lpfnWndProc = Some(DefWindowProcW);
+    window_class.lpfnWndProc = Some(window_procedure);
     window_class.hInstance = hInstance;
+    window_class.hCursor = unsafe { LoadCursorW(null_mut(), IDC_ARROW) };
 
     // We still need a LPCWSTR
     // a wide string, to Windows, means a UTF-16 string
