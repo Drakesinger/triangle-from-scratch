@@ -43,7 +43,7 @@ type LRESULT = LONG_PTR;
 type PVOID = *mut c_void;
 
 type WNDPROC = Option<
-    // WindowProc
+    // WindowProcedure
     unsafe extern "system" fn(hwnd: HWND, uMsg: UINT, wParam: WPARAM, lParam: LPARAM) -> LRESULT,
 >;
 
@@ -123,6 +123,8 @@ const SW_SHOW: c_int = 5;
 
 const IDC_ARROW: LPCWSTR = MAKEINTRESOURCE(32512);
 
+const COLOR_WINDOW: u32 = 5;
+
 #[repr(C)] // Memory Layout : https://doc.rust-lang.org/reference/type-layout.html
 ///[`WNDCLASSW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
 pub struct WNDCLASSW {
@@ -183,20 +185,28 @@ type HMODULE = HINSTANCE;
 type DWORD = c_ulong;
 type c_ulong = u32;
 
-unsafe extern "system" fn window_procedure(
-    hWnd: HWND,
-    uMsg: UINT,
-    wParam: WPARAM,
-    lParam: LPARAM,
-) -> LRESULT {
-    match uMsg {
-        WM_CLOSE => drop(DestroyWindow(hWnd)),
-        WM_DESTROY => PostQuitMessage(0),
-        _ => return DefWindowProcW(hWnd, uMsg, wParam, lParam),
-    }
+type HDC = HANDLE;
+type BYTE = u8;
 
-    0
+#[repr(C)]
+pub struct RECT {
+    left: LONG,
+    top: LONG,
+    right: LONG,
+    bottom: LONG,
 }
+unsafe_impl_default_zeroed!(RECT);
+
+#[repr(C)]
+pub struct PAINTSTRUCT {
+    hdc: HDC,
+    fErase: BOOL,
+    rcPaint: RECT,
+    fRestore: BOOL,
+    fIncUpdate: BOOL,
+    rgbReserved: [BYTE; 32],
+}
+unsafe_impl_default_zeroed!(PAINTSTRUCT);
 
 #[link(name = "Kernel32")]
 extern "system" {
@@ -223,6 +233,8 @@ type ULONG_PTR = usize;
 pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
     i as ULONG_PTR as LPWSTR
 }
+
+// type LPPAINTSTRUCT = *mut PAINTSTRUCT;
 
 #[link(name = "User32")]
 extern "system" {
@@ -269,6 +281,41 @@ extern "system" {
     /// [`LoadCursorW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadcursorw)
     pub fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) -> HCURSOR;
 
+    /// [`BeginPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-beginpaint)
+    pub fn BeginPaint(hWnd: HWND, lpPaint: *mut PAINTSTRUCT) -> HDC;
+
+    /// [`FillRect`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-fillrect)
+    pub fn FillRect(hDC: HDC, lprc: *const RECT, hbr: HBRUSH) -> c_int;
+
+    /// [`EndPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-endpaint)
+    pub fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) -> BOOL;
+
+}
+
+unsafe extern "system" fn window_procedure(
+    hwnd: HWND,
+    uMsg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+) -> LRESULT {
+    match uMsg {
+        WM_PAINT => {
+            let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
+            let hdc: HDC = BeginPaint(hwnd, &mut ps);
+
+            // All painting occurs here, between BeginPaint and EndPaint.
+
+            let _success = FillRect(hdc, &ps.rcPaint, (COLOR_WINDOW + 2) as HBRUSH);
+            EndPaint(hwnd, &ps);
+        }
+
+        // We do not specifically need to treat these, we could let windows do the heavy lifting.
+        WM_CLOSE => drop(DestroyWindow(hwnd)),
+        WM_DESTROY => PostQuitMessage(0),
+        _ => return DefWindowProcW(hwnd, uMsg, wParam, lParam),
+    }
+
+    0
 }
 
 /// Turns a Rust string slice into a null-terminated utf-16 vector.
