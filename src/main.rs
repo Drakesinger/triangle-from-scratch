@@ -49,6 +49,7 @@ type WNDPROC = Option<
 
 /// Window Messages
 const WM_NULL: u32 = 0x0000;
+const WM_NCCREATE: u32 = 0x0081;
 const WM_CREATE: u32 = 0x0001;
 const WM_DESTROY: u32 = 0x0002;
 const WM_MOVE: u32 = 0x0003;
@@ -124,6 +125,11 @@ const SW_SHOW: c_int = 5;
 const IDC_ARROW: LPCWSTR = MAKEINTRESOURCE(32512);
 
 const COLOR_WINDOW: u32 = 5;
+
+const MB_OKCANCEL: u32 = 0x00000001;
+const IDOK: c_int = 1;
+
+const GWLP_USERDATA: c_int = -21;
 
 #[repr(C)] // Memory Layout : https://doc.rust-lang.org/reference/type-layout.html
 ///[`WNDCLASSW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
@@ -208,6 +214,23 @@ pub struct PAINTSTRUCT {
 }
 unsafe_impl_default_zeroed!(PAINTSTRUCT);
 
+#[repr(C)]
+pub struct CREATESTRUCTW {
+    lpCreateParams: LPVOID,
+    hInstance: HINSTANCE,
+    hMenu: HMENU,
+    hwndParent: HWND,
+    cy: c_int,
+    cx: c_int,
+    y: c_int,
+    x: c_int,
+    style: LONG,
+    lpszName: LPCWSTR,
+    lpszClass: LPCWSTR,
+    dwExStyle: DWORD,
+}
+unsafe_impl_default_zeroed!(CREATESTRUCTW);
+
 #[link(name = "Kernel32")]
 extern "system" {
     /// [`GetModuleHandleW`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew)
@@ -290,6 +313,15 @@ extern "system" {
     /// [`EndPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-endpaint)
     pub fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) -> BOOL;
 
+    /// [`MessageBoxW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxw)
+    pub fn MessageBoxW(hWnd: HWND, lpText: LPCWSTR, lpCaption: LPCWSTR, uType: UINT) -> c_int;
+
+    /// [`SetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptrw)
+    pub fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) -> LONG_PTR;
+
+    /// [`GetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongptrw)
+    pub fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) -> LONG_PTR;
+
 }
 
 unsafe extern "system" fn window_procedure(
@@ -299,19 +331,61 @@ unsafe extern "system" fn window_procedure(
     lParam: LPARAM,
 ) -> LRESULT {
     match uMsg {
+        WM_NCCREATE => {
+            println!("WM_NCCREATE");
+
+            let create_struct = lParam as *mut CREATESTRUCTW;
+            if create_struct.is_null() {
+                println!("WTF");
+                return 0;
+            }
+            let boxed_i32_ptr: *mut i32 = (*create_struct).lpCreateParams.cast();
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, boxed_i32_ptr as LONG_PTR);
+            return 1;
+        }
+        WM_CREATE => {
+            println!("WM_CREATE");
+            return 0;
+        }
+
         WM_PAINT => {
             let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
             let hdc: HDC = BeginPaint(hwnd, &mut ps);
 
             // All painting occurs here, between BeginPaint and EndPaint.
-
+            let ptr_to_user_data = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut i32;
+            println!("Current ptr_to_user_data value: {}", *ptr_to_user_data);
+            *ptr_to_user_data += 1;
             let _success = FillRect(hdc, &ps.rcPaint, (COLOR_WINDOW + 2) as HBRUSH);
             EndPaint(hwnd, &ps);
         }
 
         // We do not specifically need to treat these, we could let windows do the heavy lifting.
-        WM_CLOSE => drop(DestroyWindow(hwnd)),
-        WM_DESTROY => PostQuitMessage(0),
+        WM_CLOSE => {
+            // Extra stuff to show a message box.
+            let message_box_text = wide_null("Do you really want to quit?");
+            let message_box_caption = wide_null("Wait a minnute!");
+            let user_input = MessageBoxW(
+                hwnd,
+                message_box_text.as_ptr(),
+                message_box_caption.as_ptr(),
+                MB_OKCANCEL,
+            );
+            if user_input == IDOK {
+                DestroyWindow(hwnd);
+            }
+
+            return 0;
+            // Otherwise
+            // drop(DestroyWindow(hwnd));
+        }
+        WM_DESTROY => {
+            // Perform cleanup.
+            let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut i32;
+            Box::from_raw(ptr);
+            println!("Cleaned up the box");
+            PostQuitMessage(0)
+        }
         _ => return DefWindowProcW(hwnd, uMsg, wParam, lParam),
     }
 
@@ -347,6 +421,9 @@ fn main() {
         );
     }
 
+    // State passed to the window.à
+    let lpParam: *mut i32 = Box::leak(Box::new(5_i32));
+
     let window_handle = unsafe {
         CreateWindowExW(
             0,
@@ -360,7 +437,7 @@ fn main() {
             null_mut(),
             null_mut(),
             hInstance,
-            null_mut(),
+            lpParam.cast(), //null_mut(),
         )
     };
     if window_handle.is_null() {
