@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -421,9 +422,10 @@ fn main() {
         );
     }
 
-    // State passed to the window.à
+    // State passed to the window.
     let lpParam: *mut i32 = Box::leak(Box::new(5_i32));
 
+    // Now we create our window.
     let window_handle = unsafe {
         CreateWindowExW(
             0,
