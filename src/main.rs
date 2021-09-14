@@ -1,26 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#![allow(non_snake_case)]
 
-#![allow(dead_code)]
-#![allow(unused_macros)]
 #![allow(unused_imports)]
-#![allow(unreachable_code)]
+// #![allow(non_snake_case)]
+// #![allow(dead_code)]
+// #![allow(unused_macros)]
+// #![allow(unreachable_code)]
 
 use triangle_from_scratch::win32::*;
 use core::ptr::{null, null_mut};
 
 unsafe extern "system" fn window_procedure(
     hwnd: HWND,
-    uMsg: UINT,
-    wParam: WPARAM,
-    lParam: LPARAM,
+    msg: UINT,
+    w_param: WPARAM,
+    l_param: LPARAM,
 ) -> LRESULT {
-    match uMsg {
+    match msg {
         WM_NCCREATE => {
             println!("WM_NCCREATE");
 
-            let create_struct = lParam as *mut CREATESTRUCTW;
+            let create_struct = l_param as *mut CREATESTRUCTW;
             if create_struct.is_null() {
                 println!("WTF");
                 return 0;
@@ -72,7 +72,7 @@ unsafe extern "system" fn window_procedure(
             println!("Cleaned up the box");
             PostQuitMessage(0)
         }
-        _ => return DefWindowProcW(hwnd, uMsg, wParam, lParam),
+        _ => return DefWindowProcW(hwnd, msg, w_param, l_param),
     }
 
     0
@@ -82,13 +82,13 @@ unsafe extern "system" fn window_procedure(
 fn main() {
     println!("Hello, world!");
 
-    let hInstance = unsafe { GetModuleHandleW(core::ptr::null()) };
+    let handle_instance = unsafe { GetModuleHandleW(core::ptr::null()) };
     let sample_window_class_wn = wide_null("Sample Window Class");
     let sample_window_name_wn = wide_null("Sample Window Name");
 
     let mut window_class: WNDCLASSW = WNDCLASSW::default();
     window_class.lpfnWndProc = Some(window_procedure);
-    window_class.hInstance = hInstance;
+    window_class.hInstance = handle_instance;
     window_class.hCursor = unsafe { LoadCursorW(null_mut(), IDC_ARROW) };
 
     // We still need a LPCWSTR
@@ -104,7 +104,7 @@ fn main() {
     }
 
     // State passed to the window.
-    let lpParam: *mut i32 = Box::leak(Box::new(5_i32));
+    let lp_param: *mut i32 = Box::leak(Box::new(5_i32));
 
     // Now we create our window.
     let window_handle = unsafe {
@@ -119,8 +119,8 @@ fn main() {
             CW_USEDEFAULT,
             null_mut(),
             null_mut(),
-            hInstance,
-            lpParam.cast(), //null_mut(),
+            handle_instance,
+            lp_param.cast(), //null_mut(),
         )
     };
     if window_handle.is_null() {
