@@ -38,10 +38,8 @@ pub type LRESULT = LONG_PTR;
 
 pub type PVOID = *mut c_void;
 
-
 pub type LONG = c_long;
 pub type c_long = i32;
-
 
 pub type HMODULE = HINSTANCE;
 pub type DWORD = c_ulong;
@@ -65,9 +63,12 @@ pub type ULONG_PTR = usize;
 
 pub type LPPAINTSTRUCT = *mut PAINTSTRUCT;
 
+pub type LPCVOID = *const core::ffi::c_void;
+pub type va_list = *mut c_char;
+pub type c_char = i8;
 
-///[`WNDPROC`](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633573(v=vs.85)) 
-/// This type defines a pointer to  the application-defined callback function `WindowProc` 
+///[`WNDPROC`](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633573(v=vs.85))
+/// This type defines a pointer to  the application-defined callback function `WindowProc`
 /// that processes messages sent to a window.
 pub type WNDPROC = Option<
     // WindowProcedure
@@ -192,7 +193,6 @@ macro_rules! unsafe_impl_default_zeroed {
     };
 }
 
-
 #[repr(C)]
 pub struct POINT {
     pub x: LONG,
@@ -211,7 +211,6 @@ pub struct MSG {
     pub lPrivate: DWORD,
 }
 unsafe_impl_default_zeroed!(MSG);
-
 
 #[repr(C)]
 pub struct RECT {
@@ -257,12 +256,21 @@ extern "system" {
 
     /// [`GetLastError`](https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror)
     pub fn GetLastError() -> DWORD;
+
+    pub fn FormatMessageW(
+        dwFlags: DWORD,
+        lpSource: LPCVOID,
+        dwMessageId: DWORD,
+        dwLanguageId: DWORD,
+        lpBuffer: LPWSTR,
+        nSize: DWORD,
+        Arguments: *mut va_list,
+    ) -> DWORD;
 }
 
 pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
     i as ULONG_PTR as LPWSTR
 }
-
 
 #[link(name = "User32")]
 extern "system" {
