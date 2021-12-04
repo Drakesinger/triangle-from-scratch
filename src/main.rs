@@ -1,14 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-
 #![allow(unused_imports)]
 // #![allow(non_snake_case)]
 // #![allow(dead_code)]
 // #![allow(unused_macros)]
 // #![allow(unreachable_code)]
 
-use triangle_from_scratch::win32::*;
 use core::ptr::{null, null_mut};
+use triangle_from_scratch::win32::*;
 
 unsafe extern "system" fn window_procedure(
     hwnd: HWND,
@@ -78,30 +76,161 @@ unsafe extern "system" fn window_procedure(
     0
 }
 
+/// Returns a handle to the file (executable file) used to create the calling process.
+///
+/// See : [`GetModuleHandleW`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew)
+pub fn get_process_handle() -> HMODULE {
+    // Safety : Null provides the executable handle that created the calling process.
+    // See [MSDN - `GetModuleHandleW` Parameters}(https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew#parameters)
+    unsafe { GetModuleHandleW(core::ptr::null()) }
+}
+
+/// Predefined cursor styles.
+pub enum EIDCursor {
+    /// Standard arrow and small hourglass
+    AppStarting = 32650,
+    /// Standard arrow
+    Arrow = 32512,
+    /// Crosshair
+    Cross = 32515,
+    /// Hand
+    Hand = 32649,
+    /// Arrow and question mark
+    Help = 32651,
+    /// I-beam
+    IBeam = 32513,
+    /// Slashed circle
+    No = 32648,
+    /// Four-pointed arrow pointing north, south, east, and west
+    SizeAll = 32646,
+    /// Double-pointed arrow pointing northeast and southwest
+    SizeNeSw = 32643,
+    /// Double-pointed arrow pointing north and south
+    SizeNS = 32645,
+    /// Double-pointed arrow pointing northwest and southeast
+    SizeNwSe = 32642,
+    /// Double-pointed arrow pointing west and east
+    SizeWE = 32644,
+    /// Vertical arrow
+    UpArrow = 32516,
+    /// Hourglass
+    Wait = 32514,
+}
+
+/// Loads the specified predefined cursors.
+///
+/// See : [`LoadCursorW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadcursorw)
+pub fn load_predefined_cursor(cursor: EIDCursor) -> Result<HCURSOR, Win32Error> {
+    let resource = MAKEINTRESOURCE(cursor as WORD);
+    // Safety : The enum only allows values from the the approved cursors list.
+    let hcursor = unsafe { LoadCursorW(null_mut(), resource) };
+    if hcursor.is_null() {
+        Err(get_last_error())
+    } else {
+        Ok(hcursor)
+    }
+}
+
+#[derive(Debug)] // trait used for when you want to display info to a programmer
+#[repr(transparent)]
+pub struct Win32Error(pub DWORD);
+impl core::fmt::Display for Win32Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let dwFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER
+            | FORMAT_MESSAGE_FROM_SYSTEM
+            | FORMAT_MESSAGE_IGNORE_INSERTS;
+        let lpSource = null_mut();
+        let dwMessageId = self.0; // NOTE is this equivalent to *this* ?
+        let dwLanguageId = 0;
+
+        // The buffer that is going to be alocated by FormatMessageW.
+        let mut buffer: *mut u16 = null_mut();
+        // Address where the pointer is located as LPTSTR (Long Pointer TCHAR string, in our case TCHAR is WCHAR, *mut u16)
+        // In C : (LPTSTR)&buffer
+        let lpBuffer = &mut buffer as *mut LPWSTR as *mut u16;
+        let nSize = 0; // Minumum size of the buffer allocated.
+        let Arguments = null_mut();
+        let tchar_count_excluding_null = unsafe {
+            FormatMessageW(
+                dwFlags,
+                lpSource,
+                dwMessageId,
+                dwLanguageId,
+                lpBuffer,
+                nSize,
+                Arguments,
+            )
+        };
+
+        if tchar_count_excluding_null == 0 || buffer.is_null() {
+            return Err(core::fmt::Error);
+        } else {
+            todo!("We got something valid")
+        }
+    }
+}
+
+/// Registers a window class struct.
+///
+/// FIXME Partially wrapped
+/// ## Safety
+///
+/// All pointer fields of the struct must be valid.
+///
+/// See [`RegisterClassW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassw)
+pub unsafe fn register_class(window_class: &WNDCLASSW) -> Result<ATOM, Win32Error> {
+    let atom = RegisterClassW(window_class);
+    if atom == 0 {
+        Err(get_last_error())
+    } else {
+        Ok(atom)
+    }
+}
+
+/// Gets the thread-local last-error code value.
+///
+/// See [`GetLastError`](https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror)
+pub fn get_last_error() -> Win32Error {
+    Win32Error(unsafe { GetLastError() })
+}
+
+/// Gets a message from the thread's message queue.
+///
+/// The message can be for any window in this thread,
+/// or it can be a non-window message as well
+pub fn get_any_message() -> Result<MSG, Win32Error> {
+    let mut msg = MSG::default();
+    let mut output = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
+    if output == -1 {
+        // We got an error.
+        Err(get_last_error())
+    } else {
+        Ok(msg)
+    }
+}
 
 fn main() {
     println!("Hello, world!");
 
-    let handle_instance = unsafe { GetModuleHandleW(core::ptr::null()) };
+    let handle_instance = get_process_handle();
     let sample_window_class_wn = wide_null("Sample Window Class");
     let sample_window_name_wn = wide_null("Sample Window Name");
 
     let mut window_class: WNDCLASSW = WNDCLASSW::default();
     window_class.lpfnWndProc = Some(window_procedure);
     window_class.hInstance = handle_instance;
-    window_class.hCursor = unsafe { LoadCursorW(null_mut(), IDC_ARROW) };
+    window_class.hCursor = load_predefined_cursor(EIDCursor::Arrow).unwrap();
 
     // We still need a LPCWSTR
     // a wide string, to Windows, means a UTF-16 string
     window_class.lpszClassName = sample_window_class_wn.as_ptr();
-    let atom = unsafe { RegisterClassW(&window_class) };
-    if atom == 0 {
+    let atom = unsafe { register_class(&window_class) }.unwrap_or_else(|()| {
         let last_error = unsafe { GetLastError() };
         panic!(
             "Could not register the window class, error code:{}",
             last_error
         );
-    }
+    });
 
     // State passed to the window.
     let lp_param: *mut i32 = Box::leak(Box::new(5_i32));
