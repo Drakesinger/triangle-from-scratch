@@ -131,6 +131,13 @@ pub fn load_predefined_cursor(cursor: EIDCursor) -> Result<HCURSOR, Win32Error> 
     }
 }
 
+struct OnDropLocalFree(HLOCAL);
+impl Drop for OnDropLocalFree {
+    fn drop(&mut self) {
+        unsafe { LocalFree(self.0) };
+    }
+}
+
 #[derive(Debug)] // trait used for when you want to display info to a programmer
 #[repr(transparent)]
 pub struct Win32Error(pub DWORD);
@@ -165,7 +172,21 @@ impl core::fmt::Display for Win32Error {
         if tchar_count_excluding_null == 0 || buffer.is_null() {
             return Err(core::fmt::Error);
         } else {
-            todo!("We got something valid")
+            // Wrap the buffer in the OnDropLocalFree struct so that when it goes 
+            // out of scope it gets dropped via a LocalFree call.
+            let _on_drop = OnDropLocalFree(buffer as HLOCAL);
+
+            // There's been no error, let's access the buffer.
+            let buffer_slice: &[u16] = unsafe {
+                core::slice::from_raw_parts_mut(buffer, tchar_count_excluding_null as usize)
+            };
+
+            for decode_result in core::char::decode_utf16(buffer_slice.iter().copied()) {
+                let ch = decode_result.unwrap_or('�');
+                write!(f, "{}", ch)?;
+            }
+
+            Ok(())
         }
     }
 }

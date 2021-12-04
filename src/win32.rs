@@ -67,6 +67,8 @@ pub type LPCVOID = *const core::ffi::c_void;
 pub type va_list = *mut c_char;
 pub type c_char = i8;
 
+pub type HLOCAL = HANDLE;
+
 ///[`WNDPROC`](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633573(v=vs.85))
 /// This type defines a pointer to  the application-defined callback function `WindowProc`
 /// that processes messages sent to a window.
@@ -261,6 +263,7 @@ extern "system" {
     /// [`GetLastError`](https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror)
     pub fn GetLastError() -> DWORD;
 
+    /// [`FormatMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagew)
     pub fn FormatMessageW(
         dwFlags: DWORD,
         lpSource: LPCVOID,
@@ -270,6 +273,9 @@ extern "system" {
         nSize: DWORD,
         Arguments: *mut va_list,
     ) -> DWORD;
+    
+    /// [`LocalFree`](https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree)
+    pub fn LocalFree(hMem: HLOCAL) -> HLOCAL;
 }
 
 pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
