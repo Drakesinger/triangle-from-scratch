@@ -159,6 +159,10 @@ pub const IDOK: c_int = 1;
 
 pub const GWLP_USERDATA: c_int = -21;
 
+pub const FORMAT_MESSAGE_ALLOCATE_BUFFER: u32 = 0x00000100;
+pub const FORMAT_MESSAGE_FROM_SYSTEM: u32 = 0x00001000;
+pub const FORMAT_MESSAGE_IGNORE_INSERTS: u32 = 0x00000200;
+
 #[repr(C)] // Memory Layout : https://doc.rust-lang.org/reference/type-layout.html
 ///[`WNDCLASSW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
 pub struct WNDCLASSW {
