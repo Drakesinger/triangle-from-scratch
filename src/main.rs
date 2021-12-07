@@ -6,6 +6,7 @@
 // #![allow(unreachable_code)]
 
 use core::ptr::{null, null_mut};
+use std::os::raw::{c_int, c_uint};
 use triangle_from_scratch::win32::*;
 
 unsafe extern "system" fn window_procedure(
@@ -143,6 +144,11 @@ impl Drop for OnDropLocalFree {
 pub struct Win32Error(pub DWORD);
 impl core::fmt::Display for Win32Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // If the 29th bit is set, it's an error.
+        if self.0 & (1 << 29) > 0 {
+            return write!(f, "Win32ApplicationError({})", self.0);
+        }
+
         let dwFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER
             | FORMAT_MESSAGE_FROM_SYSTEM
             | FORMAT_MESSAGE_IGNORE_INSERTS;
@@ -172,24 +178,28 @@ impl core::fmt::Display for Win32Error {
         if tchar_count_excluding_null == 0 || buffer.is_null() {
             return Err(core::fmt::Error);
         } else {
-            // Wrap the buffer in the OnDropLocalFree struct so that when it goes 
+            // Wrap the buffer in the OnDropLocalFree struct so that when it goes
             // out of scope it gets dropped via a LocalFree call.
             let _on_drop = OnDropLocalFree(buffer as HLOCAL);
-
+            // Binding it to a _ variable (ignored result) would drop it immediately.
             // There's been no error, let's access the buffer.
             let buffer_slice: &[u16] = unsafe {
                 core::slice::from_raw_parts_mut(buffer, tchar_count_excluding_null as usize)
             };
 
             for decode_result in core::char::decode_utf16(buffer_slice.iter().copied()) {
-                let ch = decode_result.unwrap_or('�');
-                write!(f, "{}", ch)?;
+                match decode_result {
+                    Ok('\r') | Ok('\n') => write!(f, " ")?,
+                    Ok(ch) => write!(f, "{}", ch)?,
+                    Err(_) => write!(f, "�")?,
+                }
             }
 
             Ok(())
         }
     }
 }
+impl std::error::Error for Win32Error {}
 
 /// Registers a window class struct.
 ///
@@ -227,6 +237,46 @@ pub fn get_any_message() -> Result<MSG, Win32Error> {
         Err(get_last_error())
     } else {
         Ok(msg)
+    }
+}
+
+/// Creates a window.
+///
+/// * The window is not initially shown, you must call [`ShowWindow`] yourself.
+///
+/// See [`CreateWindowExW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexw)
+pub unsafe fn create_app_window(
+    class_name: &str,
+    window_name: &str,
+    coordinates: Option<[i32; 2]>,
+    [width, height]: [i32; 2],
+    param: LPVOID,
+) -> Result<HWND, Win32Error> {
+    let class_name_wn = wide_null(class_name).as_ptr();
+    let window_name_wn = wide_null(window_name).as_ptr();
+    let position = match coordinates {
+        Some([x, y]) => (x, y),
+        None => (CW_USEDEFAULT, CW_USEDEFAULT),
+    };
+
+    let handle: HWND = CreateWindowExW(
+        0,
+        class_name_wn,
+        window_name_wn,
+        WS_OVERLAPPEDWINDOW,
+        position.0,
+        position.1,
+        width,
+        height,
+        null_mut(),
+        null_mut(),
+        get_process_handle(),
+        param,
+    );
+    if handle.is_null() {
+        Err(get_last_error())
+    } else {
+        Ok(handle)
     }
 }
 
