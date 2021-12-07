@@ -228,7 +228,10 @@ pub fn get_last_error() -> Win32Error {
 /// Gets a message from the thread's message queue.
 ///
 /// The message can be for any window in this thread,
-/// or it can be a non-window message as well
+/// or it can be a non-window message as well.
+///
+/// See [`GetMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagew)
+#[inline(always)]
 pub fn get_any_message() -> Result<MSG, Win32Error> {
     let mut msg = MSG::default();
     let mut output = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
@@ -278,6 +281,17 @@ pub unsafe fn create_app_window(
     } else {
         Ok(handle)
     }
+}
+
+/// Translates virtual-key messages into character messages. 
+/// 
+/// The character messages are posted to the calling thread's message queue, to be read 
+/// the next time the thread calls the [`GetMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagew)
+/// or [PeekMessageW](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-peekmessagew) function.
+/// 
+/// See [`TranslateMessage`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-translatemessage)
+pub fn translate_message(msg: &MSG) -> bool {
+    0 != unsafe { TranslateMessage(msg) }
 }
 
 fn main() {
@@ -331,23 +345,18 @@ fn main() {
 
     let mut msg = MSG::default();
     loop {
-        let message_return = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
-        // If we receive the WM_QUIT message, the return value is 0.
-        if message_return == 0 {
-            break;
-        }
-        // If we receive a -1, then there was an error.
-        else if message_return == -1 {
-            let last_error = unsafe { GetLastError() };
-            panic!(
-                "Error when trying to get a message. Error code: {}",
-                last_error
-            );
-        } else {
-            unsafe {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+        match get_any_message() {
+            Ok(msg) => {
+                if msg.message == WM_QUIT {
+                    break;
+                } else {
+                    unsafe {
+                        translate_message(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                }
             }
+            Err(e) => panic!("Error when getting a message from the queue: {}", e),
         }
     }
 }
