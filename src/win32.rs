@@ -273,9 +273,12 @@ extern "system" {
         nSize: DWORD,
         Arguments: *mut va_list,
     ) -> DWORD;
-    
+
     /// [`LocalFree`](https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree)
     pub fn LocalFree(hMem: HLOCAL) -> HLOCAL;
+
+    /// [`SetLastError`](https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror)
+    pub fn SetLastError(dwErrCode: DWORD);
 }
 
 pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
