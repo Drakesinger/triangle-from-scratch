@@ -3,6 +3,7 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 #![allow(unused_macros)]
+#![allow(unused_imports)]
 #![allow(unreachable_code)]
 
 /// Following the tutorial :

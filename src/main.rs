@@ -9,6 +9,73 @@ use core::ptr::{null, null_mut};
 use std::os::raw::{c_int, c_uint};
 use triangle_from_scratch::win32::*;
 
+/// Sets the thread-local last-error code value.
+///
+/// See [`SetLastError`](https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror)
+pub fn set_last_error(e: Win32Error) {
+    unsafe { SetLastError(e.0) }
+}
+
+/// Sets the "userdata" pointer of the window (`GWLP_USERDATA`).
+///
+/// **Returns:** The previous userdata pointer.
+///
+/// [`SetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptrw)
+pub unsafe fn set_window_userdata<T>(hwnd: HWND, ptr: *mut T) -> Result<*mut T, Win32Error> {
+    set_last_error(Win32Error(0));
+    let out = SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as LONG_PTR);
+    if out == 0 {
+        // Check the last error, if it's also 0 then this is not a "real" error.
+        let last_error = get_last_error();
+        if last_error.0 == 0 {
+            Ok(out as *mut T)
+        } else {
+            Err(last_error)
+        }
+    } else {
+        Ok(out as *mut T)
+    }
+}
+
+/// Gets the "userdata" pointer of the window (`GWLP_USERDATA`).
+///
+/// **Returns:** The userdata pointer.
+///
+/// [`GetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongptrw)
+pub unsafe fn get_window_userdata<T>(hwnd: HWND) -> Result<*mut T, Win32Error> {
+    set_last_error(Win32Error(0));
+    let out = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if out == 0 {
+        // if output is 0, it's only a "real" error if the last_error is non-zero
+        let last_error = get_last_error();
+        if last_error.0 != 0 {
+            Err(last_error)
+        } else {
+            Ok(out as *mut T)
+        }
+    } else {
+        Ok(out as *mut T)
+    }
+}
+
+/// Indicates to the system that a thread has made a request to terminate (quit).
+/// It is typically used in response to a [WM_DESTROY](https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-destroy)
+/// message.
+///
+/// The PostQuitMessage function posts a [WM_QUIT](https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-quit) message
+/// to the thread's message queue and returns immediately; the function simply indicates to the system that the thread
+/// is requesting to quit at some time in the future.
+///
+/// When the thread retrieves the [WM_QUIT](https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-quit) message from
+/// its message queue, it should exit its message loop and return control to the system.
+/// The exit value returned to the system **must** be the wParam parameter of the [WM_QUIT](https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-quit)
+/// message.
+///
+/// See [`PostQuitMessage`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-postquitmessage)
+pub fn post_quit_message(exit_code: c_int) {
+    unsafe { PostQuitMessage(exit_code) }
+}
+
 unsafe extern "system" fn window_procedure(
     hwnd: HWND,
     msg: UINT,
@@ -24,9 +91,12 @@ unsafe extern "system" fn window_procedure(
                 println!("WTF");
                 return 0;
             }
-            let boxed_i32_ptr: *mut i32 = (*create_struct).lpCreateParams.cast();
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, boxed_i32_ptr as LONG_PTR);
-            return 1;
+            let boxed_i32_ptr: *mut i32 = (*create_struct).lpCreateParams.cast::<i32>();
+            if let Err(e) = set_window_userdata::<i32>(hwnd, boxed_i32_ptr) {
+                println!("Couldn't set the WindowData pointer: {}", e);
+                return 0;
+            }
+            return DefWindowProcW(hwnd, msg, w_param, l_param);
         }
         WM_CREATE => {
             println!("WM_CREATE");
@@ -34,13 +104,26 @@ unsafe extern "system" fn window_procedure(
         }
 
         WM_PAINT => {
+            let get_userdata_result = get_window_userdata::<i32>(hwnd);
+            match get_userdata_result {
+                Ok(ptr_to_user_data) => {
+                    if !ptr_to_user_data.is_null() {
+                        println!("Current window userdata : {}", *ptr_to_user_data);
+                        *ptr_to_user_data += 1;
+                    }
+                }
+                Ok(_) => {
+                    println!("Userdata is empty.");
+                }
+                Err(e) => {
+                    println!("Error while getting userdata: {}", e);
+                }
+            }
+
             let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
             let hdc: HDC = BeginPaint(hwnd, &mut ps);
 
             // All painting occurs here, between BeginPaint and EndPaint.
-            let ptr_to_user_data = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut i32;
-            println!("Current ptr_to_user_data value: {}", *ptr_to_user_data);
-            *ptr_to_user_data += 1;
             let _success = FillRect(hdc, &ps.rcPaint, (COLOR_WINDOW + 2) as HBRUSH);
             EndPaint(hwnd, &ps);
         }
@@ -66,14 +149,26 @@ unsafe extern "system" fn window_procedure(
         }
         WM_DESTROY => {
             // Perform cleanup.
-            let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut i32;
-            Box::from_raw(ptr);
-            println!("Cleaned up the box");
-            PostQuitMessage(0)
+            match get_window_userdata::<i32>(hwnd) {
+                Ok(ptr) if !ptr.is_null() => {
+                    Box::from_raw(ptr);
+                    println!("Cleaned up the box");
+                }
+                Ok(_) => {
+                    println!("Userdata pointer is null, no cleanup.");
+                }
+                Err(e) => {
+                    println!(
+                        "Error while getting the userdata to perform cleanup : {}",
+                        e
+                    );
+                }
+            }
+            post_quit_message(0);
         }
         _ => return DefWindowProcW(hwnd, msg, w_param, l_param),
     }
-
+    // Return 0, but we should never get here.$ 
     0
 }
 
@@ -283,12 +378,12 @@ pub unsafe fn create_app_window(
     }
 }
 
-/// Translates virtual-key messages into character messages. 
-/// 
-/// The character messages are posted to the calling thread's message queue, to be read 
+/// Translates virtual-key messages into character messages.
+///
+/// The character messages are posted to the calling thread's message queue, to be read
 /// the next time the thread calls the [`GetMessageW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagew)
 /// or [PeekMessageW](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-peekmessagew) function.
-/// 
+///
 /// See [`TranslateMessage`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-translatemessage)
 pub fn translate_message(msg: &MSG) -> bool {
     0 != unsafe { TranslateMessage(msg) }
