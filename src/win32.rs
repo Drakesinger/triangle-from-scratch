@@ -154,7 +154,43 @@ pub const SW_SHOW: c_int = 5;
 
 pub const IDC_ARROW: LPCWSTR = MAKEINTRESOURCE(32512);
 
-pub const COLOR_WINDOW: u32 = 5;
+/// See [`GetSysColor`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsyscolor)
+pub enum SysColor {
+    _3D_DARK_SHADOW = 21,
+    _3D_LIGHT = 22,
+    ACTIVE_BORDER = 10,
+    ACTIVE_CAPTION = 2,
+    APP_WORKSPACE = 12,
+    /// Button face, also "3D face" color.
+    BUTTON_FACE = 15,
+    /// Button highlight, also "3D highlight" color.
+    BUTTON_HIGHLIGHT = 20,
+    /// Button shadow, also "3D shadow" color.
+    BUTTON_SHADOW = 16,
+    BUTTON_TEXT = 18,
+    CAPTION_TEXT = 9,
+    /// Desktop background color
+    DESKTOP = 1,
+    GRADIENT_ACTIVE_CAPTION = 27,
+    GRADIENT_INACTIVE_CAPTION = 28,
+    GRAY_TEXT = 17,
+    HIGHLIGHT = 13,
+    HIGHLIGHT_TEXT = 14,
+    HOT_LIGHT = 26,
+    INACTIVE_BORDER = 11,
+    INACTIVE_CAPTION = 3,
+    INACTIVE_CAPTION_TEXT = 19,
+    INFO_BACKGROUND = 24,
+    INFO_TEXT = 23,
+    MENU = 4,
+    MENU_HIGHLIGHT = 29,
+    MENU_BAR = 30,
+    MENU_TEXT = 7,
+    SCROLL_BAR = 0,
+    WINDOW = 5,
+    WINDOW_FRAME = 6,
+    WINDOW_TEXT = 8,
+}
 
 pub const MB_OKCANCEL: u32 = 0x00000001;
 pub const IDOK: c_int = 1;
@@ -285,6 +321,7 @@ pub const fn MAKEINTRESOURCE(i: WORD) -> LPWSTR {
     i as ULONG_PTR as LPWSTR
 }
 
+/// See `C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\um\WinUser.h`
 #[link(name = "User32")]
 extern "system" {
     /// [`RegisterClassW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassw)
@@ -347,6 +384,9 @@ extern "system" {
 
     /// [`GetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongptrw)
     pub fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) -> LONG_PTR;
+
+    /// [`GetSysColor `](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsyscolor)
+    pub fn GetSysColor(nIndex: c_int) -> DWORD;
 
 }
 

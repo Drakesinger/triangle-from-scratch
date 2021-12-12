@@ -76,6 +76,35 @@ pub fn post_quit_message(exit_code: c_int) {
     unsafe { PostQuitMessage(exit_code) }
 }
 
+/// See [`BeginPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-beginpaint)
+pub unsafe fn begin_paint(hwnd: HWND) -> Result<(HDC, PAINTSTRUCT), Win32Error> {
+    let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
+    let hdc: HDC = BeginPaint(hwnd, &mut ps);
+    if hdc.is_null() {
+        Err(get_last_error())
+    } else {
+        Ok((hdc, ps))
+    }
+}
+
+pub unsafe fn end_paint(hwnd: HWND, ps: &PAINTSTRUCT) {
+    EndPaint(hwnd, ps);
+}
+
+/// Fills a rectangle area with a specific color.
+pub unsafe fn fill_rect_with_system_color(
+    hdc: HDC,
+    rect: &RECT,
+    color: SysColor,
+) -> Result<(), ()> {
+    let _success = FillRect(hdc, rect, (color as u32 + 1) as HBRUSH);
+    if _success != 0 {
+        Ok(())
+    } else {
+        Err(())
+    }
+}
+
 unsafe extern "system" fn window_procedure(
     hwnd: HWND,
     msg: UINT,
@@ -119,13 +148,17 @@ unsafe extern "system" fn window_procedure(
                     println!("Error while getting userdata: {}", e);
                 }
             }
-
-            let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
-            let hdc: HDC = BeginPaint(hwnd, &mut ps);
-
-            // All painting occurs here, between BeginPaint and EndPaint.
-            let _success = FillRect(hdc, &ps.rcPaint, (COLOR_WINDOW + 2) as HBRUSH);
-            EndPaint(hwnd, &ps);
+            let begin_paint_result = begin_paint(hwnd);
+            match begin_paint_result {
+                Ok((hdc, ps)) => {
+                    // All painting occurs here, between BeginPaint and EndPaint.
+                    let _ = fill_rect_with_system_color(hdc, &ps.rcPaint, SysColor::WINDOW);
+                    end_paint(hwnd, &ps);
+                }
+                Err(e) => {
+                    println!("Error while trying to start painting: {}", e);
+                }
+            }
         }
 
         // We do not specifically need to treat these, we could let windows do the heavy lifting.
@@ -166,9 +199,10 @@ unsafe extern "system" fn window_procedure(
             }
             post_quit_message(0);
         }
+        // This should be the actual return value.
         _ => return DefWindowProcW(hwnd, msg, w_param, l_param),
     }
-    // Return 0, but we should never get here.$ 
+    // Return 0, but we should never get here.
     0
 }
 
@@ -404,12 +438,9 @@ fn main() {
     // We still need a LPCWSTR
     // a wide string, to Windows, means a UTF-16 string
     window_class.lpszClassName = sample_window_class_wn.as_ptr();
-    let atom = unsafe { register_class(&window_class) }.unwrap_or_else(|()| {
-        let last_error = unsafe { GetLastError() };
-        panic!(
-            "Could not register the window class, error code:{}",
-            last_error
-        );
+    let _atom = unsafe { register_class(&window_class) }.unwrap_or_else(|e: Win32Error| {
+        //let last_error = unsafe { GetLastError() };
+        panic!("Could not register the window class, error code:{}", e);
     });
 
     // State passed to the window.
