@@ -202,9 +202,73 @@ pub const FORMAT_MESSAGE_ALLOCATE_BUFFER: u32 = 0x00000100;
 pub const FORMAT_MESSAGE_FROM_SYSTEM: u32 = 0x00001000;
 pub const FORMAT_MESSAGE_IGNORE_INSERTS: u32 = 0x00000200;
 
+/// Redraws the entire window if a movement or size adjustment changes the height of the client area.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_VREDRAW: u32 = 0x0001;
+/// Redraws the entire window if a movement or size adjustment changes the width of the client area.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_HREDRAW: u32 = 0x0002;
+/// Sends a double-click message to the window procedure when the user double-clicks the mouse while
+/// the cursor is within a window belonging to the class.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_DBLCLKS: u32 = 0x0008;
+/// Allocates a unique device context for each window in the class.
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_OWNDC: u32 = 0x0020;
+/// Allocates one device context to be shared by all windows in the class. 
+/// Because window classes are process specific, it is possible for multiple threads of an 
+/// application to create a window of the same class. It is also possible for the threads to attempt
+/// to use the device context simultaneously. When this happens, the system allows only one thread
+/// to successfully finish its drawing operation.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_CLASSDC: u32 = 0x0040;
+/// Sets the clipping rectangle of the child window to that of the parent window so that the child
+/// can draw on the parent. A window with the CS_PARENTDC style bit receives a regular device context
+/// from the system's cache of device contexts. It does not give the child the parent's device 
+/// context or device context settings. Specifying CS_PARENTDC enhances an application's performance.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_PARENTDC: u32 = 0x0080;
+/// Disables Close on the window menu.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_NOCLOSE: u32 = 0x0200;
+/// Saves, as a bitmap, the portion of the screen image obscured by a window of this class.
+/// When the window is removed, the system uses the saved bitmap to restore the screen image, 
+/// including other windows that were obscured. Therefore, the system does not send `WM_PAINT` 
+/// messages to windows that were obscured if the memory used by the bitmap has not been discarded
+/// and if other screen actions have not invalidated the stored image.
+/// This style is useful for small windows (for example, menus or dialog boxes) that are displayed
+/// briefly and then removed before other screen activity takes place. This style increases the 
+/// time required to display the window, because the system must first allocate memory to store
+/// the bitmap.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_SAVEBITS: u32 = 0x0800;
+/// Aligns the window's client area on a byte boundary (in the x direction).
+/// This style affects the width of the window and its horizontal placement on the display.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_BYTEALIGNCLIENT: u32 = 0x1000;
+/// Aligns the window on a byte boundary (in the x direction).
+/// This style affects the width of the window and its horizontal placement on the display.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_BYTEALIGNWINDOW: u32 = 0x2000;
+/// Indicates that the window class is an application global class.
+/// For more information, see the ["Application Global Classes"](https://docs.microsoft.com/en-us/windows/win32/winmsg/about-window-classes#application-global-classes) section of About Window Classes.
+/// 
+/// See [Window Class Styles - Constants](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles#constants)
+pub const CS_GLOBALCLASS: u32 = 0x4000;
+
 #[repr(C)] // Memory Layout : https://doc.rust-lang.org/reference/type-layout.html
 ///[`WNDCLASSW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
 pub struct WNDCLASSW {
+    /// The class style(s). This member can be any combination of the [Class Styles](https://docs.microsoft.com/en-us/windows/win32/winmsg/about-window-classes).
     pub style: UINT,
     pub lpfnWndProc: WNDPROC,
     pub cbClsExtra: c_int,
@@ -271,12 +335,12 @@ unsafe_impl_default_zeroed!(RECT);
 pub struct PAINTSTRUCT {
     pub hdc: HDC,
     /// Indicates whether the background must be erased.
-    /// 
-    /// This value is nonzero if the application should erase the background. 
-    /// The application is responsible for erasing the background if a window 
-    /// class is created without a background brush. For more information, 
-    /// see the description of the hbrBackground member of the 
-    /// [`WNDCLASS`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw) 
+    ///
+    /// This value is nonzero if the application should erase the background.
+    /// The application is responsible for erasing the background if a window
+    /// class is created without a background brush. For more information,
+    /// see the description of the hbrBackground member of the
+    /// [`WNDCLASS`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw)
     /// structure.
     pub fErase: BOOL,
     pub rcPaint: RECT,

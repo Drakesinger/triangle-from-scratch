@@ -463,22 +463,22 @@ pub fn translate_message(msg: &MSG) -> bool {
 }
 
 fn main() {
-    println!("Hello, world!");
+    let window_name = "Sample Window Name";
+    let class_name = "Sample Window Class";
 
     let handle_instance = get_process_handle();
-    let sample_window_class_wn = wide_null("Sample Window Class");
-    let sample_window_name_wn = wide_null("Sample Window Name");
+    let sample_window_class_wn = wide_null(class_name);
 
     let mut window_class: WNDCLASSW = WNDCLASSW::default();
     window_class.lpfnWndProc = Some(window_procedure);
     window_class.hInstance = handle_instance;
     window_class.hCursor = load_predefined_cursor(EIDCursor::Arrow).unwrap();
+    window_class.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 
     // We still need a LPCWSTR
     // a wide string, to Windows, means a UTF-16 string
     window_class.lpszClassName = sample_window_class_wn.as_ptr();
     let _atom = unsafe { register_class(&window_class) }.unwrap_or_else(|e: Win32Error| {
-        //let last_error = unsafe { GetLastError() };
         panic!("Could not register the window class, error code:{}", e);
     });
 
@@ -486,25 +486,11 @@ fn main() {
     let lp_param: *mut i32 = Box::leak(Box::new(5_i32));
 
     // Now we create our window.
-    let window_handle = unsafe {
-        CreateWindowExW(
-            0,
-            sample_window_class_wn.as_ptr(),
-            sample_window_name_wn.as_ptr(),
-            WS_OVERLAPPEDWINDOW,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            null_mut(),
-            null_mut(),
-            handle_instance,
-            lp_param.cast(), //null_mut(),
-        )
-    };
-    if window_handle.is_null() {
-        panic!("Failed to create a window");
-    }
+    let window_handle =
+        unsafe { create_app_window(class_name, window_name, None, [800, 600], lp_param.cast()) }
+            .unwrap_or_else(|e: Win32Error| {
+                panic!("Failed to create a window: {}", e);
+            });
 
     let _previously_visible = unsafe { ShowWindow(window_handle, SW_SHOW) };
 
