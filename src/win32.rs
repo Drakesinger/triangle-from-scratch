@@ -45,6 +45,7 @@ pub type HMODULE = HINSTANCE;
 pub type DWORD = c_ulong;
 pub type c_ulong = u32;
 
+/// A handle to the device context.
 pub type HDC = HANDLE;
 pub type BYTE = u8;
 
@@ -254,7 +255,9 @@ pub struct MSG {
 }
 unsafe_impl_default_zeroed!(MSG);
 
+/// A pointer to a RECT structure that contains the logical coordinates of the rectangle to be filled
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct RECT {
     pub left: LONG,
     pub top: LONG,
@@ -263,9 +266,18 @@ pub struct RECT {
 }
 unsafe_impl_default_zeroed!(RECT);
 
+/// See [`PAINTSTRUCT`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-paintstruct)
 #[repr(C)]
 pub struct PAINTSTRUCT {
     pub hdc: HDC,
+    /// Indicates whether the background must be erased.
+    /// 
+    /// This value is nonzero if the application should erase the background. 
+    /// The application is responsible for erasing the background if a window 
+    /// class is created without a background brush. For more information, 
+    /// see the description of the hbrBackground member of the 
+    /// [`WNDCLASS`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassw) 
+    /// structure.
     pub fErase: BOOL,
     pub rcPaint: RECT,
     pub fRestore: BOOL,

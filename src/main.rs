@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(unused_imports)]
-// #![allow(non_snake_case)]
+#![allow(non_snake_case)]
 // #![allow(dead_code)]
 // #![allow(unused_macros)]
 // #![allow(unreachable_code)]
@@ -21,9 +21,9 @@ pub fn set_last_error(e: Win32Error) {
 /// **Returns:** The previous userdata pointer.
 ///
 /// [`SetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptrw)
-pub unsafe fn set_window_userdata<T>(hwnd: HWND, ptr: *mut T) -> Result<*mut T, Win32Error> {
+pub fn set_window_userdata<T>(hwnd: HWND, ptr: *mut T) -> Result<*mut T, Win32Error> {
     set_last_error(Win32Error(0));
-    let out = SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as LONG_PTR);
+    let out = unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as LONG_PTR) };
     if out == 0 {
         // Check the last error, if it's also 0 then this is not a "real" error.
         let last_error = get_last_error();
@@ -42,9 +42,9 @@ pub unsafe fn set_window_userdata<T>(hwnd: HWND, ptr: *mut T) -> Result<*mut T, 
 /// **Returns:** The userdata pointer.
 ///
 /// [`GetWindowLongPtrW`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongptrw)
-pub unsafe fn get_window_userdata<T>(hwnd: HWND) -> Result<*mut T, Win32Error> {
+pub fn get_window_userdata<T>(hwnd: HWND) -> Result<*mut T, Win32Error> {
     set_last_error(Win32Error(0));
-    let out = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    let out = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) };
     if out == 0 {
         // if output is 0, it's only a "real" error if the last_error is non-zero
         let last_error = get_last_error();
@@ -77,9 +77,9 @@ pub fn post_quit_message(exit_code: c_int) {
 }
 
 /// See [`BeginPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-beginpaint)
-pub unsafe fn begin_paint(hwnd: HWND) -> Result<(HDC, PAINTSTRUCT), Win32Error> {
+pub fn begin_paint(hwnd: HWND) -> Result<(HDC, PAINTSTRUCT), Win32Error> {
     let mut ps: PAINTSTRUCT = PAINTSTRUCT::default();
-    let hdc: HDC = BeginPaint(hwnd, &mut ps);
+    let hdc: HDC = unsafe { BeginPaint(hwnd, &mut ps) };
     if hdc.is_null() {
         Err(get_last_error())
     } else {
@@ -87,8 +87,10 @@ pub unsafe fn begin_paint(hwnd: HWND) -> Result<(HDC, PAINTSTRUCT), Win32Error> 
     }
 }
 
-pub unsafe fn end_paint(hwnd: HWND, ps: &PAINTSTRUCT) {
-    EndPaint(hwnd, ps);
+/// See [`EndPaint`](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-endpaint)
+pub fn end_paint(hwnd: HWND, ps: &PAINTSTRUCT) {
+    // We do not care about the return value of EndPaint as it's always non-zero.
+    unsafe { EndPaint(hwnd, ps) };
 }
 
 /// Fills a rectangle area with a specific color.
@@ -103,6 +105,16 @@ pub unsafe fn fill_rect_with_system_color(
     } else {
         Err(())
     }
+}
+
+pub unsafe fn do_some_painting<F>(hwnd: HWND, f: F) -> Result<(), Win32Error>
+where
+    F: FnOnce(HDC, bool, RECT) -> Result<(), Win32Error>,
+{
+    let (hdc, ps) = begin_paint(hwnd)?;
+    let output = f(hdc, ps.fErase != 0, ps.rcPaint);
+    end_paint(hwnd, &ps);
+    output
 }
 
 unsafe extern "system" fn window_procedure(
@@ -139,46 +151,55 @@ unsafe extern "system" fn window_procedure(
                     if !ptr_to_user_data.is_null() {
                         println!("Current window userdata : {}", *ptr_to_user_data);
                         *ptr_to_user_data += 1;
+                    } else {
+                        println!("Userdata is empty.");
                     }
-                }
-                Ok(_) => {
-                    println!("Userdata is empty.");
                 }
                 Err(e) => {
                     println!("Error while getting userdata: {}", e);
                 }
             }
-            let begin_paint_result = begin_paint(hwnd);
-            match begin_paint_result {
-                Ok((hdc, ps)) => {
-                    // All painting occurs here, between BeginPaint and EndPaint.
-                    let _ = fill_rect_with_system_color(hdc, &ps.rcPaint, SysColor::WINDOW);
-                    end_paint(hwnd, &ps);
-                }
-                Err(e) => {
-                    println!("Error while trying to start painting: {}", e);
-                }
-            }
+
+            // Either like this, or the below with closure.
+            // let begin_paint_result = begin_paint(hwnd);
+            // match begin_paint_result {
+            //     Ok((hdc, ps)) => {
+            //         // All painting occurs here, between BeginPaint and EndPaint.
+            //         let _ = fill_rect_with_system_color(hdc, &ps.rcPaint, SysColor::WINDOW);
+            //         end_paint(hwnd, &ps);
+            //     }
+            //     Err(e) => {
+            //         println!("Error while trying to start painting: {}", e);
+            //     }
+            // }
+
+            // I don't like this closure way too much, probably because it doesn't make sense for me too much yet.
+            do_some_painting(hwnd, |hdc, _erase_bg, target_rect| {
+                let _ = fill_rect_with_system_color(hdc, &target_rect, SysColor::WINDOW);
+                Ok(())
+            })
+            .unwrap_or_else(|e| println!("Error while painting: {}", e));
         }
 
         // We do not specifically need to treat these, we could let windows do the heavy lifting.
         WM_CLOSE => {
             // Extra stuff to show a message box.
-            let message_box_text = wide_null("Do you really want to quit?");
-            let message_box_caption = wide_null("Wait a minnute!");
-            let user_input = MessageBoxW(
-                hwnd,
-                message_box_text.as_ptr(),
-                message_box_caption.as_ptr(),
-                MB_OKCANCEL,
-            );
-            if user_input == IDOK {
-                DestroyWindow(hwnd);
+            let show_message_result =
+                show_message_box(hwnd, "Wait a minute!", "Do you really want to quit?");
+            match show_message_result {
+                Ok(user_decision) => {
+                    if user_decision == IDOK {
+                        //DestroyWindow(hwnd);
+                        // Otherwise
+                        drop(DestroyWindow(hwnd));
+                    }
+                }
+                Err(e) => {
+                    println!("Error when showing the message box: {}", e);
+                }
             }
 
             return 0;
-            // Otherwise
-            // drop(DestroyWindow(hwnd));
         }
         WM_DESTROY => {
             // Perform cleanup.
@@ -204,6 +225,24 @@ unsafe extern "system" fn window_procedure(
     }
     // Return 0, but we should never get here.
     0
+}
+
+pub fn show_message_box(hwnd: HWND, caption: &str, text: &str) -> Result<i32, Win32Error> {
+    let message_box_text = wide_null(text);
+    let message_box_caption = wide_null(caption);
+    let message_result = unsafe {
+        MessageBoxW(
+            hwnd,
+            message_box_text.as_ptr(),
+            message_box_caption.as_ptr(),
+            MB_OKCANCEL,
+        )
+    };
+    if message_result == 0 {
+        Err(get_last_error())
+    } else {
+        Ok(message_result)
+    }
 }
 
 /// Returns a handle to the file (executable file) used to create the calling process.
@@ -332,7 +371,7 @@ impl std::error::Error for Win32Error {}
 
 /// Registers a window class struct.
 ///
-/// FIXME Partially wrapped
+/// # ! Partially wrapped !
 /// ## Safety
 ///
 /// All pointer fields of the struct must be valid.
@@ -363,7 +402,7 @@ pub fn get_last_error() -> Win32Error {
 #[inline(always)]
 pub fn get_any_message() -> Result<MSG, Win32Error> {
     let mut msg = MSG::default();
-    let mut output = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
+    let output = unsafe { GetMessageW(&mut msg, null_mut(), 0, 0) };
     if output == -1 {
         // We got an error.
         Err(get_last_error())
@@ -469,15 +508,14 @@ fn main() {
 
     let _previously_visible = unsafe { ShowWindow(window_handle, SW_SHOW) };
 
-    let mut msg = MSG::default();
     loop {
         match get_any_message() {
             Ok(msg) => {
                 if msg.message == WM_QUIT {
-                    break;
+                    std::process::exit(msg.wParam as i32);
                 } else {
+                    translate_message(&msg);
                     unsafe {
-                        translate_message(&msg);
                         DispatchMessageW(&msg);
                     }
                 }
