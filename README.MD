@@ -1,0 +1,4 @@
+# `triangle-from-scratch` :
+
+Following [Lokathor's rust tutorial to get a triangle drawing on screen without libs](https://rust-tutorials.github.io/triangle-from-scratch/), this small app presents the first steps in my attempt to migrate the work I already did following [Casey Muratori's Handmade Hero stream](https://hero.handmade.network/episode/code).
+Potential development after the tutorial finish would be to use Vulkan instead of OpenGL, which will then be followed by work to get an actual 3D model rendering. This will be done via either a direct integartion with [Blender](https://www.blender.org/) or the `.blend` file format.
